@@ -67,7 +67,7 @@ def optimize_cart(wanted_products, product_sellers):
       card_to_buy_by_seller_id[seller_id].append(card_seller_association)
       objective_function += (card['price'] * card_to_buy_by_card_id[card_id][-1])
 
-      # CONSTAINT: I can't get more than the maximum amount of a card that the seller has
+      # CONSTRAINT: I can't get more than the maximum amount of a card that the seller has
       model += (card_seller_association <= card['quantity'], "CantPickMoreThanSeller{}QuantityOfCard{}".format(seller_name, card_id))
 
     # CONSTRAINT: I have to pay the shipment of a seller if I take even only one of his cards
