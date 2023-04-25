@@ -83,6 +83,9 @@ def optimize_cart(wanted_products, product_sellers):
   model += objective_function
   model.solve(apis.PULP_CBC_CMD(msg=False))
 
+  if model.status != 1:
+    return { 'solvable': False }
+
   # build output result
   result_sellers = {}
   for index, seller in enumerate(product_sellers):
@@ -97,6 +100,7 @@ def optimize_cart(wanted_products, product_sellers):
       result_sellers[seller['id']]['cards'] = [{'id': (re.search("^Card(.+)FromSeller.+$", c.name).group(1)), 'quantity': c.value()} for c in picked_cards]
 
   return {
+    'solvable': model.status == 1,
     'total': model.objective.value(),
     'sellers': result_sellers
   }

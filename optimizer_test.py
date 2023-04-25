@@ -50,6 +50,7 @@ class OptimizerTest(unittest.TestCase):
 
     result = optimize_cart(wanted_products, product_sellers)
 
+    self.assertEqual(result['solvable'], True)
     self.assertEqual(result['total'], 79,)
     self.assertEqual(len(result['sellers']), 2)
 
@@ -98,6 +99,7 @@ class OptimizerTest(unittest.TestCase):
 
     result = optimize_cart(wanted_products, product_sellers)
 
+    self.assertEqual(result['solvable'], True)
     self.assertEqual(result['total'], 80)
     self.assertEqual(len(result['sellers']), 1)
 
@@ -146,5 +148,35 @@ class OptimizerTest(unittest.TestCase):
 
     result = optimize_cart(wanted_products, product_sellers)
 
+    self.assertEqual(result['solvable'], True)
     self.assertEqual(result['total'], 131)
     self.assertEqual(len(result['sellers']), len(product_sellers))
+
+  def test_requested_quantities_are_not_available(self):
+    wanted_products = [
+      {
+        'id': 'A',
+        'name': 'CartaA',
+        'quantity': 2,
+      },
+    ]
+
+    product_sellers = [
+      {
+        'id': '1',
+        'name': 'Venditore1',
+        'shipping': 30,
+        'catalog': {
+          'A': {
+            'price': 21,
+            'quantity': 1
+          }
+        }
+      },
+    ]
+
+    result = optimize_cart(wanted_products, product_sellers)
+
+    self.assertEqual(result['solvable'], False)
+    self.assertEqual('total' in result, False)
+    self.assertEqual('sellers' in result, False)
