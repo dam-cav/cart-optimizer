@@ -18,12 +18,21 @@ def optimize_cart(wanted_products, product_sellers):
       ... repeat for each seller
 
       3 - I must buy one unit of each requested card
-      PickCardAFromSellerX + PickCardAFromSellerY + ... >= 1
-      PickCardBFromSellerX + PickCardBFromSellerY + ... >= 1
+      PickCardAFromSellerX + PickCardAFromSellerY + ... >= CardAWantedQuantity
+      PickCardBFromSellerX + PickCardBFromSellerY + ... >= CardBWantedQuantity
       ... repeat for each required card
+
+      4 - I cannot buy from a seller more units of a card than available quantity
+      PickCardAFromSellerX <= SellerXCardAQuantity
+      PickCardBFromSellerX <= SellerXCardBQuantity
+      PickCardAFromSellerY <= SellerYCardAQuantity
+      ... repeat for every card in seller catalog
   '''
 
-  wanted_products_ids = list(map((lambda p: p['id']), wanted_products))
+  wanted_products_by_ids = {}
+  for product in wanted_products:
+    wanted_products_by_ids[product['id']] = product
+  wanted_products_ids = list(wanted_products_by_ids.keys())
 
   model = LpProblem(name="CartOptimization", sense=LpMinimize)
   objective_function = 0
@@ -44,7 +53,7 @@ def optimize_cart(wanted_products, product_sellers):
 
     # OBJECTIVE FUNCTION: builds (PickCardAFromSellerX * SellerXCardAPrice + ...) part
     seller_matching_catalog = [
-      {'id': card_id, 'price': card_value['price']}
+      {'id': card_id, 'price': card_value['price'], 'quantity': card_value['quantity']}
       for card_id, card_value in seller['catalog'].items() if card_id in wanted_products_ids
     ]
     for card in seller_matching_catalog:
@@ -58,15 +67,18 @@ def optimize_cart(wanted_products, product_sellers):
       card_to_buy_by_seller_id[seller_id].append(card_seller_association)
       objective_function += (card['price'] * card_to_buy_by_card_id[card_id][-1])
 
+      # CONSTAINT: I can't get more than the maximum amount of a card that the seller has
+      model += (card_seller_association <= card['quantity'], "CantPickMoreThanSeller{}QuantityOfCard{}".format(seller_name, card_id))
+
     # CONSTRAINT: I have to pay the shipment of a seller if I take even only one of his cards
     model += (lpSum(card_to_buy_by_seller_id[seller_id]) - shipping_activator_value * shippings_to_pay[-1] <= 0, "MustPay{}ShippingWhenBuyingFromIt".format(seller_name))
 
   # CONSTRAINT: I always have to pay at least one shipment
   model += (lpSum(shippings_to_pay) >= 1, "always_one_seller")
 
-  # CONSTRAINT: I must take at least one unit of each required card
+  # CONSTRAINT: I must take at least required units of each required card
   for card_id, card_from_sellers in card_to_buy_by_card_id.items():
-    model += (lpSum(card_from_sellers) >= 1, "get_card_{}".format(card_id))
+    model += (lpSum(card_from_sellers) >= wanted_products_by_ids[card_id]['quantity'], "get_card_{}".format(card_id))
 
   model += objective_function
   model.solve(apis.PULP_CBC_CMD(msg=False))
@@ -79,10 +91,10 @@ def optimize_cart(wanted_products, product_sellers):
     # if I'm paying him shipping, I'm getting something
     if paying_shipping:
       result_sellers[seller['id']] = { 'shipping': seller['shipping'] }
-      picked_cards = [c for c in card_to_buy_by_seller_id[seller['id']] if c.value() == 1]
+      picked_cards = [c for c in card_to_buy_by_seller_id[seller['id']] if c.value() >= 1]
 
       # TODO: I'm getting card id back from the LpVariable name, maybe find another way???
-      result_sellers[seller['id']]['cards'] = [(re.search("^Card(.+)FromSeller.+$", c.name).group(1)) for c in picked_cards]
+      result_sellers[seller['id']]['cards'] = [{'id': (re.search("^Card(.+)FromSeller.+$", c.name).group(1)), 'quantity': c.value()} for c in picked_cards]
 
   return {
     'total': model.objective.value(),
